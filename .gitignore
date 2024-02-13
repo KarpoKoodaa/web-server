@@ -5,6 +5,7 @@
 *.elf
 
 # Execubtables
+build/
 *.out
 *.app
 *.hex
