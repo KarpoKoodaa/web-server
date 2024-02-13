@@ -7,7 +7,7 @@ OBJ_DIR	:= ${BUILD_DIR}/obj
 BUILD_DIR	:= ./build
 
 CC	:= gcc
-CC_CFLAGS	:= -I${INC_DIR} -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wconversion -Wunused-parameter -std=c11 -g
+CC_CFLAGS	:= -I${INC_DIR} -Wall -Wextra -Wpedantic -Werror -Wshadow -Wformat=2 -Wconversion -Wunused-parameter -g
 
 EXE	:= $(BUILD_DIR)/web-server
 SRC	:= $(wildcard $(SRC_DIR)/*.c)
