@@ -1,0 +1,15 @@
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Execubtables
+*.out
+*.app
+*.hex
+
+# Debug files
+*.dSYM/
+
+
