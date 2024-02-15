@@ -104,16 +104,16 @@ int main()
                     const char *response = 
                         "HTTP/1.1 200 OK\r\n"
                         "Connection: close\r\n"
-                        "Content-type: text/plain\r\n\r\n"
+                        "Content-Type: text/plain\r\n\r\n"
                         "Local time is: ";
-                    int bytes_sent = send(socket_listen, response, strlen(response), 0);
+                    int bytes_sent = send(i, response, strlen(response), 0);
                     printf("Send %d of %d bytes.\n", bytes_sent, (int)strlen(response));
 
-                    // For testing purposes loccal time is send back to client
+                    // For testing purposes local time is send back to client
                     time_t timer;
                     time(&timer);
                     char *time_msg = ctime(&timer);
-                    bytes_sent = send(socket_listen, time_msg, strlen(time_msg), 0);
+                    bytes_sent = send(i, time_msg, strlen(time_msg), 0);
                     printf("Sent %d of %d bytes.\n", bytes_sent, (int)strlen(time_msg));
                 
                 }
