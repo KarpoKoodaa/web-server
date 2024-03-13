@@ -6,6 +6,7 @@
  */
 
 #include "nwheaders.h"
+#include "net.h"
 #include <ctype.h>
 #include <time.h>
 
@@ -14,49 +15,14 @@
 
 int main() 
 {
-    printf("Configuring local address....\n");
-    struct addrinfo hints;
-    memset (&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;
 
-    struct addrinfo *bind_address;
-    int s;
-    // TODO: Get port from command line
-    s = getaddrinfo(0, "8080", &hints, &bind_address);
-    if (s != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
-        return 1;
-    }
 
-    printf("Creating socket...\n");
-    SOCKET socket_listen;
-    socket_listen = socket(bind_address->ai_family,
-            bind_address->ai_socktype, bind_address->ai_protocol);
-    if(!ISVALIDSOCKET(socket_listen)) {
-        fprintf(stderr, "socket failed. (%d)\n", GETSOCKETERRNO());
-        return 1;
-    }
-
-    printf("Binding socket to local address...\n");
-    if(bind(socket_listen,
-                bind_address->ai_addr, bind_address->ai_addrlen)) {
-        fprintf(stderr, "bind() failed. (%d)\n", GETSOCKETERRNO());
-        return 1;
-    }
-    freeaddrinfo(bind_address);
-
-    printf("Listening....\n");
-    if (listen(socket_listen, 10) < 0) {
-        fprintf(stderr, "listen() failed. (%d)", GETSOCKETERRNO());
-        return 1;
-    }
+    SOCKET server = create_socket(0,"8080");
 
     fd_set master;
     FD_ZERO(&master);
-    FD_SET(socket_listen, &master);
-    SOCKET max_socket = socket_listen;
+    FD_SET(server, &master);
+    SOCKET max_socket = server;
 
     printf("Waiting for connections...\n");
 
@@ -72,10 +38,10 @@ int main()
         for (i = 1; i <= max_socket; ++i) {
             if(FD_ISSET(i, &reads)) {
                 // Handle socket
-                if (i == socket_listen) {
+                if (i == server) {
                     struct sockaddr_storage client_address;
                     socklen_t client_len = sizeof(client_address);
-                    SOCKET socket_client = accept(socket_listen,(struct sockaddr*) &client_address, &client_len);
+                    SOCKET socket_client = accept(server,(struct sockaddr*) &client_address, &client_len);
                     if(!ISVALIDSOCKET(socket_client)) {
                         fprintf(stderr, "accept() failed. (%d)\n", GETSOCKETERRNO());
                         return 1;
@@ -121,7 +87,7 @@ int main()
         }
     }
     printf("Closing socket...\n");
-    CLOSESOCKET(socket_listen);
+    CLOSESOCKET(server);
 
     printf("Finished.\n");
 
