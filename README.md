@@ -1,6 +1,6 @@
 # Simple Web Server 
 This is a simple web server implementation using C.
-The code  is based on Lewis Van Winkle's "Hands-On Network Programming with C" book.
+The code  is based on Lewis Van Winkle's ["Hands-On Network Programming with C"](https://github.com/PacktPublishing/Hands-On-Network-Programming-with-C?tab=readme-ov-file) book.
 
 ## Requirements
 - tba
