@@ -7,10 +7,77 @@
 
 #include "nwheaders.h"
 #include "net.h"
+#include "client.h"
+#include "error_msg.h"
+#include "mime.h"
+#include "server.h"
 #include <ctype.h>
 #include <time.h>
+#include <string.h>
 
 #define BUF_SIZE 1024
+// #define MAX_REQUEST_SIZE 2047 
+
+
+void serve_resource(struct client_info **client_list, struct client_info *client, const char *path)
+{
+    printf("server: serve resource %s %s\n", get_client_address(client), path);
+
+    if (strcmp(path, "/") == 0) path = "/index.html";
+
+    if (strlen(path) > 100) {
+        send_404(client_list, client);
+        return;
+    }
+
+    if (strstr(path, "..")) {
+        send_404(client_list, client);
+        return;
+    }
+
+    char full_path[128];
+    sprintf(full_path, "public%s", path);
+
+    FILE *fp = fopen(full_path, "rb");
+
+    if (!fp) {
+        send_404(client_list, client);
+        return;
+    }
+
+    fseek(fp, 0L, SEEK_END);
+    long cl = ftell(fp);
+    rewind(fp);
+
+    const char *content_type = get_mime_type(full_path);
+
+#define BSIZE 1024
+    char buffer[BSIZE];
+
+    sprintf(buffer, "HTTP/1.1 200 OK\r\n");
+    send(client->socket, buffer, strlen(buffer), 0);
+
+    sprintf(buffer, "Connection: close\r\n");
+    send(client->socket, buffer, strlen(buffer), 0);
+
+    sprintf(buffer, "Content-Length: %lu\r\n", cl);
+    send(client->socket, buffer, strlen(buffer), 0);
+
+    sprintf(buffer, "Content-Type: %s\r\n", content_type);
+    send(client->socket, buffer, strlen(buffer), 0);
+
+    sprintf(buffer, "\r\n");
+    send(client->socket, buffer, strlen(buffer), 0);
+
+    size_t r = fread(buffer, 1, BSIZE, fp);
+    while(r) {
+        send(client->socket, buffer, r, 0);
+        r = fread(buffer, 1, BSIZE, fp);
+    }
+
+    fclose(fp);
+    drop_client(client_list, client);
+}
 
 
 int main() 
@@ -19,73 +86,75 @@ int main()
 
     SOCKET server = create_socket(0,"8080");
 
-    fd_set master;
-    FD_ZERO(&master);
-    FD_SET(server, &master);
-    SOCKET max_socket = server;
-
-    printf("Waiting for connections...\n");
+    struct client_info *client_list = 0;
 
     while(1) {
         fd_set reads;
-        reads = master;
-        if(select(max_socket+1, &reads, 0, 0,0) < 0) {
-            fprintf(stderr, "select() failed. %d\n", GETSOCKETERRNO());
-            return 1;
+        reads = wait_on_clients(&client_list, server);
+
+        if (FD_ISSET(server, &reads)) {
+            struct client_info *client = get_client(&client_list, -1);
+
+            client->socket = accept(server, 
+                    (struct sockaddr*) &(client->address),
+                    &(client->addr_length));
+
+            if (!ISVALIDSOCKET(client->socket)) {
+                fprintf(stderr, "socket() failed. (%d)", errno);
+                return 1;
+            }
+
+            printf("server: new connection from %s.\n", get_client_address(client));
         }
 
-        SOCKET i;
-        for (i = 1; i <= max_socket; ++i) {
-            if(FD_ISSET(i, &reads)) {
-                // Handle socket
-                if (i == server) {
-                    struct sockaddr_storage client_address;
-                    socklen_t client_len = sizeof(client_address);
-                    SOCKET socket_client = accept(server,(struct sockaddr*) &client_address, &client_len);
-                    if(!ISVALIDSOCKET(socket_client)) {
-                        fprintf(stderr, "accept() failed. (%d)\n", GETSOCKETERRNO());
-                        return 1;
-                    }
+        struct client_info *client = client_list;
+        while(client) {
+            struct client_info *next = client->next;
 
-                    FD_SET(socket_client, &master);
-                    if(socket_client > max_socket) {
-                        max_socket = socket_client;
-                    }
+            if (FD_ISSET(client->socket, &reads)) {
 
-                    char address_buffer[100];
-                    getnameinfo((struct sockaddr*)&client_address, client_len, address_buffer, sizeof(address_buffer), 0, 0, NI_NUMERICHOST);
-                    printf("New connection from %s\n", address_buffer);
+                if (MAX_REQUEST_SIZE == client->received) {
+                    send_400(&client_list, client);
+                    client = next;
+                    continue;
                 }
-                else {
-                    char read[1024];
-                    int bytes_received = recv(i, read, 1024, 0);
-                    printf("Bytes received: %d\n", bytes_received);
-                    printf("%.*s", bytes_received, read);
-                    if (bytes_received < 1) {
-                        FD_CLR(i, &master);
-                        CLOSESOCKET(i);
-                        continue;
-                    }
-                    printf("Sending response...\n");
-                    const char *response = 
-                        "HTTP/1.1 200 OK\r\n"
-                        "Connection: close\r\n"
-                        "Content-Type: text/plain\r\n\r\n"
-                        "Local time is: ";
-                    int bytes_sent = send(i, response, strlen(response), 0);
-                    printf("Send %d of %d bytes.\n", bytes_sent, (int)strlen(response));
 
-                    // For testing purposes local time is send back to client
-                    time_t timer;
-                    time(&timer);
-                    char *time_msg = ctime(&timer);
-                    bytes_sent = send(i, time_msg, strlen(time_msg), 0);
-                    printf("Sent %d of %d bytes.\n", bytes_sent, (int)strlen(time_msg));
-                
+                int r = recv(client->socket, 
+                        client->request + client->received, 
+                        (size_t)(MAX_REQUEST_SIZE - client->received), 0);
+
+                if (r < 1) {
+                    printf("Unexpected disconnect from %s.\n", get_client_address(client));
+                    drop_client(&client_list, client);
+
+                } else {
+                    client->received += r;
+                    client->request[client->received] = 0;
+
+                    char *q = strstr(client->request, "\r\n\r\n");
+                    if(q) {
+                        *q = 0;
+
+                        if (strncmp("GET /", client->request, 5)) {
+                            send_400(&client_list, client);
+                        } else {
+                            char *path = client->request + 4;
+                            char *end_path = strstr(path, " ");
+                            if(!end_path) {
+                                send_400(&client_list, client);
+                            } else {
+                                *end_path = 0;
+                                serve_resource(&client_list, client, path);
+                            }
+                        }
+                    } // if(q)
                 }
             }
+            client = next;
         }
-    }
+
+    } //while(1)
+
     printf("Closing socket...\n");
     CLOSESOCKET(server);
 

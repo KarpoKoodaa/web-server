@@ -1,5 +1,5 @@
 #include <string.h>
-#include <mime.h>
+#include "mime.h"
 
 
 const char *get_mime_type (const char *path)

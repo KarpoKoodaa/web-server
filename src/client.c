@@ -1,18 +1,11 @@
+#include <stdlib.h>
 #include "nwheaders.h"
 #include "client.h"
+#include "server.h"
 
 #define MAX_REQUEST_SIZE 2047
 
 // Is this here or in header file?
-struct client_info {
-    socklen_t addr_length;
-    struct sockaddr_storage address;
-    char address_buffer[128];
-    SOCKET socket;
-    char request[MAX_REQUEST_SIZE + 1];
-    int received;
-    struct client_info *next;
-};
 
 // get client
 struct client_info *get_client(struct client_info **client_list, SOCKET s)
@@ -38,8 +31,7 @@ struct client_info *get_client(struct client_info **client_list, SOCKET s)
 
     if (!n) {
         fprintf(stderr, "Out of memory!\n");
-        exit()
-            exit(1);
+        exit(1);
     }
 
     n->addr_length = sizeof(n->address);
@@ -74,9 +66,9 @@ void drop_client(struct client_info **client_list, struct client_info *client)
 // get_client_address
 const char *get_client_address(struct client_info *ci)
 {
-    getnameinfo((struct sockaddr*)ci->address,
+    getnameinfo((struct sockaddr*)&ci->address,
             ci->addr_length,
-            ci->address_buffer, sizeof(address_buffer), 0, 0, 
+            ci->address_buffer, sizeof(ci->address_buffer), 0, 0, 
             NI_NUMERICHOST);
 
     return ci->address_buffer;
